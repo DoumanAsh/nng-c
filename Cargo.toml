@@ -1,0 +1,31 @@
+[package]
+name = "nng-c"
+version = "1.8.0"
+authors = ["Douman <douman@gmx.se>"]
+edition = "2018"
+keywords = ["nng", "nanomsg"]
+categories = ["api-bindings"]
+description = "High level API to nng bindings"
+license = "BSL-1.0"
+repository = "https://github.com/DoumanAsh/nng-c"
+documentation = "https://docs.rs/crate/nng-c"
+
+[dependencies.error-code]
+version = "3"
+
+[dependencies.nng-c-sys]
+version = "=1.8.0-beta.1"
+
+[dependencies.log]
+version = "0.4"
+default-features = false
+optional = true
+
+[features]
+# Enables HTTP transport code
+http = ["nng-c-sys/http"]
+
+[package.metadata.docs.rs]
+features = ["http", "log"]
+# defines the configuration attribute `docsrs`
+rustdoc-args = ["--cfg", "docsrs"]
