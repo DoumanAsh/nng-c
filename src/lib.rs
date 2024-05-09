@@ -15,6 +15,7 @@ mod msg;
 pub use msg::Message;
 mod error;
 pub use error::{ErrorCode, NngError};
-mod socket;
+pub mod options;
+pub mod socket;
 pub use socket::Socket;
 pub mod utils;

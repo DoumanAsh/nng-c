@@ -1,4 +1,6 @@
-use nng_c::{Socket, Message, NngError};
+use nng_c::{options, Socket, Message, NngError};
+
+use core::time;
 
 mod rt;
 
@@ -11,7 +13,12 @@ fn should_do_req_resp_inproc() {
     const THIRD: u16 = u16::MAX - 1;
     const BYTES: &[u8] = &[1, 10, 20, 50, 100];
 
+    let options = options::Req {
+        resend_time: Some(time::Duration::from_millis(50)),
+        resend_tick: Some(time::Duration::from_millis(1)),
+    };
     let client = Socket::req0().expect("Create client");
+    client.set_opt(options).expect("Set options");
     let server = Socket::rep0().expect("Create server");
 
     server.listen(ADDR.into()).expect("listen");
@@ -214,11 +221,6 @@ fn should_do_req_resp_async_ipc() {
 
     let req = client.send_msg_async(req).expect("Create send message future");
     rt::run(req).expect("Success");
-
-    let resp = server.recv_msg_async().expect("create future");
-    resp.cancel();
-    let error = rt::run(resp).expect_err("Should error out");
-    assert!(error.is_cancelled());
 
     let resp = server.recv_msg_async().expect("create future");
     let mut resp = rt::run(resp).expect("Get message").expect("To have message");

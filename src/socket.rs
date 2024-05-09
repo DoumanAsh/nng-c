@@ -1,9 +1,11 @@
+//!Socket module
 use crate::ErrorCode;
 use crate::error::error;
 use crate::msg::Message;
 use crate::aio::Aio;
 use crate::sys;
 use crate::url::Url;
+use crate::options::Options;
 
 use sys::nng_socket;
 use sys::nng_close;
@@ -46,7 +48,7 @@ impl ConnectOptions {
 pub struct Socket(pub(crate) nng_socket);
 
 impl Socket {
-    #[inline]
+    #[inline(always)]
     fn with(init: InitFn) -> Result<Self, ErrorCode> {
         let mut socket = nng_socket {
             id: 0
@@ -61,6 +63,7 @@ impl Socket {
         } else {
             Err(error(result))
         }
+
     }
 
     #[inline(always)]
@@ -130,6 +133,13 @@ impl Socket {
         }
     }
 
+    #[inline(always)]
+    ///Sets options on the socket
+    ///
+    ///It is user responsibility to use options that are valid for the protocol of use
+    pub fn set_opt<T: Options<Self>>(&self, opts: T) -> Result<(), ErrorCode> {
+        opts.apply(self)
+    }
 
     #[inline]
     ///Tries to get message, if available, returning `None` if no message is available
