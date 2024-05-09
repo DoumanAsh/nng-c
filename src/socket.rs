@@ -11,10 +11,35 @@ use sys::{nng_pub0_open, nng_sub0_open};
 use sys::{nng_req0_open, nng_rep0_open};
 
 use core::pin::Pin;
+use core::ffi::c_int;
 use core::future::Future;
 use core::{mem, fmt, ops, ptr, task};
 
 type InitFn = unsafe extern "C" fn(msg: *mut nng_socket) -> core::ffi::c_int;
+
+#[derive(Copy, Clone, Default)]
+///Connect options
+pub struct ConnectOptions {
+    flags: c_int
+}
+
+impl ConnectOptions {
+    ///Initializes default connect options.
+    pub const fn new() -> Self {
+        Self {
+            flags: 0
+        }
+    }
+
+    ///Sets async mode, making connection to be performed in background
+    ///
+    ///By default, connection blocks, until socket is connected to the remote peer.
+    pub const fn with_async(self) -> Self {
+        Self {
+            flags: self.flags | sys::NNG_FLAG_NONBLOCK
+        }
+    }
+}
 
 #[repr(transparent)]
 ///Generic socket type
@@ -89,15 +114,22 @@ impl Socket {
     #[inline]
     ///Connects to the remote peer via `url`.
     pub fn connect(&self, url: Url<'_>) -> Result<(), ErrorCode> {
+        self.connect_with(url, ConnectOptions::new())
+    }
+
+    #[inline]
+    ///Connects to the remote peer via `url`, with custom options settings
+    pub fn connect_with(&self, url: Url<'_>, options: ConnectOptions) -> Result<(), ErrorCode> {
         let url = url.as_ptr();
         let result = unsafe {
-            sys::nng_dial(**self, url as _, ptr::null_mut(), 0)
+            sys::nng_dial(**self, url as _, ptr::null_mut(), options.flags)
         };
         match result {
             0 => Ok(()),
             code => Err(error(code))
         }
     }
+
 
     #[inline]
     ///Tries to get message, if available, returning `None` if no message is available
