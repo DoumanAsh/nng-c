@@ -6,6 +6,21 @@ use core::ffi::CStr;
 
 pub use error_code::ErrorCode;
 
+use crate::sys;
+
+///Extension to error code with shortcut for some meaningful checks
+pub trait NngError {
+    ///Returns whether error code indicates cancellation of future.
+    fn is_cancelled(&self) -> bool;
+}
+
+impl NngError for ErrorCode {
+    #[inline(always)]
+    fn is_cancelled(&self) -> bool {
+        self.raw_code() == sys::nng_errno_enum::NNG_ECANCELED
+    }
+}
+
 static CATEGORY: error_code::Category = error_code::Category {
     name: "NngError",
     equivalent,

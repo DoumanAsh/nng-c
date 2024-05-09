@@ -19,6 +19,7 @@ const _: () = {
     assert!(mem::size_of::<State>() == 24);
 };
 
+#[repr(transparent)]
 ///Wrapper for NNG Url (C String)
 pub struct Url<'a> {
     state: State<'a>

@@ -1,15 +1,18 @@
 use crate::ErrorCode;
 use crate::error::error;
 use crate::msg::Message;
-
+use crate::aio::Aio;
 use crate::sys;
 use crate::url::Url;
+
 use sys::nng_socket;
 use sys::nng_close;
 use sys::{nng_pub0_open, nng_sub0_open};
 use sys::{nng_req0_open, nng_rep0_open};
 
-use core::{mem, fmt, ops, ptr};
+use core::pin::Pin;
+use core::future::Future;
+use core::{mem, fmt, ops, ptr, task};
 
 type InitFn = unsafe extern "C" fn(msg: *mut nng_socket) -> core::ffi::c_int;
 
@@ -132,6 +135,12 @@ impl Socket {
     }
 
     #[inline]
+    ///Creates new future that attempts to receive message from the socket.
+    pub fn recv_msg_async(&self) -> Result<FutureResp, ErrorCode> {
+        FutureResp::new(self)
+    }
+
+    #[inline]
     ///Sends message over the socket.
     ///
     ///If successful takes ownership of message.
@@ -148,6 +157,15 @@ impl Socket {
             },
             code => Err((msg, error(code))),
         }
+    }
+
+    #[inline]
+    ///Sends message over the socket asynchronously.
+    ///
+    ///If successful takes ownership of message.
+    ///Otherwise returns message with error code.
+    pub fn send_msg_async(&self, msg: Message) -> Result<FutureReq, ErrorCode> {
+        FutureReq::new(self, msg)
     }
 }
 
@@ -178,5 +196,89 @@ impl ops::DerefMut for Socket {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+///Futures that resolves into message
+pub struct FutureResp {
+    aio: Aio,
+}
+
+impl FutureResp {
+    ///Creates new future to retrieve message from the socket
+    pub fn new(socket: &Socket) -> Result<Self, ErrorCode> {
+        let aio = Aio::new()?;
+        unsafe {
+            sys::nng_recv_aio(**socket, aio.as_ptr())
+        }
+
+        Ok(Self {
+            aio
+        })
+    }
+
+    ///Sets future for cancelling
+    pub fn cancel(&self) {
+        unsafe {
+            sys::nng_aio_cancel(self.aio.as_ptr())
+        }
+    }
+}
+
+impl Future for FutureResp {
+    type Output = Result<Option<Message>, ErrorCode>;
+
+    fn poll(mut self: Pin<&mut Self>, ctx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
+        let mut this = self.as_mut();
+        if this.aio.is_ready() {
+            task::Poll::Ready(this.aio.get_msg())
+        } else {
+            this.aio.register_waker(ctx.waker());
+            task::Poll::Pending
+        }
+    }
+}
+
+///Futures that awaits message to be sent
+pub struct FutureReq {
+    aio: Aio,
+}
+
+impl FutureReq {
+    ///Creates new future taking ownership over `msg`
+    pub fn new(socket: &Socket, msg: Message) -> Result<Self, ErrorCode> {
+        let aio = Aio::new()?;
+        unsafe {
+            sys::nng_aio_set_msg(aio.as_ptr(), msg.as_ptr());
+            sys::nng_send_aio(**socket, aio.as_ptr())
+        }
+
+        //AIO takes ownership of the message
+        mem::forget(msg);
+
+        Ok(Self {
+            aio
+        })
+    }
+
+    ///Sets future for cancelling
+    pub fn cancel(&self) {
+        unsafe {
+            sys::nng_aio_cancel(self.aio.as_ptr())
+        }
+    }
+}
+
+impl Future for FutureReq {
+    type Output = Result<(), (Message, ErrorCode)>;
+
+    fn poll(mut self: Pin<&mut Self>, ctx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
+        let mut this = self.as_mut();
+        if this.aio.is_ready() {
+            task::Poll::Ready(this.aio.get_send_result())
+        } else {
+            this.aio.register_waker(ctx.waker());
+            task::Poll::Pending
+        }
     }
 }
