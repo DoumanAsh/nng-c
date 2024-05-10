@@ -7,17 +7,12 @@ use crate::sys;
 use crate::url::Url;
 use crate::options::Options;
 
-use sys::nng_socket;
-use sys::nng_close;
-use sys::{nng_pub0_open, nng_sub0_open};
-use sys::{nng_req0_open, nng_rep0_open};
-
 use core::pin::Pin;
 use core::ffi::c_int;
 use core::future::Future;
 use core::{mem, fmt, ops, ptr, task};
 
-type InitFn = unsafe extern "C" fn(msg: *mut nng_socket) -> core::ffi::c_int;
+type InitFn = unsafe extern "C" fn(msg: *mut sys::nng_socket) -> core::ffi::c_int;
 
 #[derive(Copy, Clone, Default)]
 ///Connect options
@@ -45,12 +40,12 @@ impl ConnectOptions {
 
 #[repr(transparent)]
 ///Generic socket type
-pub struct Socket(pub(crate) nng_socket);
+pub struct Socket(pub(crate) sys::nng_socket);
 
 impl Socket {
     #[inline(always)]
     fn with(init: InitFn) -> Result<Self, ErrorCode> {
-        let mut socket = nng_socket {
+        let mut socket = sys::nng_socket {
             id: 0
         };
 
@@ -67,27 +62,39 @@ impl Socket {
     }
 
     #[inline(always)]
+    ///Creates new version 0 pair socket
+    pub fn pair0() -> Result<Self, ErrorCode> {
+        Self::with(sys::nng_pair0_open)
+    }
+
+    #[inline(always)]
+    ///Creates new version 1 pair socket
+    pub fn pair1() -> Result<Self, ErrorCode> {
+        Self::with(sys::nng_pair1_open)
+    }
+
+    #[inline(always)]
     ///Creates new version 0 publisher socket
     pub fn pub0() -> Result<Self, ErrorCode> {
-        Self::with(nng_pub0_open)
+        Self::with(sys::nng_pub0_open)
     }
 
     #[inline(always)]
     ///Creates new version 0 subscriber socket
     pub fn sub0() -> Result<Self, ErrorCode> {
-        Self::with(nng_sub0_open)
+        Self::with(sys::nng_sub0_open)
     }
 
     #[inline(always)]
     ///Creates new version 0 request socket
     pub fn req0() -> Result<Self, ErrorCode> {
-        Self::with(nng_req0_open)
+        Self::with(sys::nng_req0_open)
     }
 
     #[inline(always)]
     ///Creates new version 0 reply socket
     pub fn rep0() -> Result<Self, ErrorCode> {
-        Self::with(nng_rep0_open)
+        Self::with(sys::nng_rep0_open)
     }
 
     #[inline(always)]
@@ -97,7 +104,7 @@ impl Socket {
     ///Otherwise, if socket is already closed, returns `false`
     pub fn close(&self) -> bool {
         unsafe {
-            nng_close(self.0) == 0
+            sys::nng_close(self.0) == 0
         }
     }
 
@@ -226,7 +233,7 @@ impl Drop for Socket {
 }
 
 impl ops::Deref for Socket {
-    type Target = nng_socket;
+    type Target = sys::nng_socket;
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {

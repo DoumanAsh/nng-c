@@ -25,6 +25,17 @@ macro_rules! set_bytes_option {
     }
 }
 
+macro_rules! set_int_option {
+    ($socket:expr, $name:expr, $num:expr) => {
+        unsafe {
+            match sys::nng_socket_set_int($socket, $name.as_ptr() as _, $num as _) {
+                0 => Ok(()),
+                code => Err(error(code)),
+            }
+        }
+    }
+}
+
 macro_rules! set_duration_option {
     ($socket:expr, $name:expr, $duration:expr) => {
         match $duration.as_millis().try_into() {
@@ -81,5 +92,17 @@ pub struct Unsubscribe<'a>(pub &'a [u8]);
 impl Options<Socket> for Unsubscribe<'_> {
     fn apply(&self, target: &Socket) -> Result<(), ErrorCode> {
         set_bytes_option!(**target, sys::NNG_OPT_SUB_UNSUBSCRIBE, self.0)
+    }
+}
+
+#[derive(Copy, Clone, Default)]
+///Max number of hops message can make to reach peer
+///
+///Usually defaults to 8
+pub struct MaxTtl(pub u8);
+
+impl Options<Socket> for MaxTtl {
+    fn apply(&self, target: &Socket) -> Result<(), ErrorCode> {
+        set_int_option!(**target, sys::NNG_OPT_MAXTTL, self.0)
     }
 }
