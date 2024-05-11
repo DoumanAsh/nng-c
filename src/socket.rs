@@ -5,7 +5,7 @@ use crate::msg::Message;
 use crate::aio::Aio;
 use crate::sys;
 use crate::url::Url;
-use crate::options::Options;
+use crate::options::{Options, Property};
 
 use core::pin::Pin;
 use core::ffi::c_int;
@@ -146,6 +146,12 @@ impl Socket {
     ///It is user responsibility to use options that are valid for the protocol of use
     pub fn set_opt<T: Options<Self>>(&self, opts: T) -> Result<(), ErrorCode> {
         opts.apply(self)
+    }
+
+    #[inline(always)]
+    ///Get property of the socket
+    pub fn get_prop<T: Property<Self>>(&self) -> Result<T, ErrorCode> {
+        T::get(self)
     }
 
     #[inline]
