@@ -241,7 +241,7 @@ impl SocketName {
     }
 
     ///Access raw bytes
-    pub fn bytes(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         if let Some(idx) = self.0.iter().position(|byt| *byt == 0) {
             &self.0[..idx]
         } else {
@@ -251,7 +251,7 @@ impl SocketName {
 
     ///Returns string, if raw bytes are valid unicode
     pub fn as_str(&self) -> Option<&str> {
-        core::str::from_utf8(self.bytes()).ok()
+        core::str::from_utf8(self.as_bytes()).ok()
     }
 }
 
@@ -278,30 +278,146 @@ impl Property<Socket> for SocketName {
 impl PartialEq for SocketName {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.bytes() == other.bytes()
+        self.as_bytes() == other.as_bytes()
+    }
+}
+
+impl PartialEq<PeerName> for SocketName {
+    #[inline]
+    fn eq(&self, other: &PeerName) -> bool {
+        self.as_bytes() == other.0.as_bytes()
     }
 }
 
 impl PartialEq<str> for SocketName {
     #[inline]
     fn eq(&self, other: &str) -> bool {
-        self.bytes() == other.as_bytes()
+        self.as_bytes() == other.as_bytes()
     }
 }
 
 impl PartialEq<&str> for SocketName {
     #[inline]
     fn eq(&self, other: &&str) -> bool {
-        self.bytes() == other.as_bytes()
+        self.as_bytes() == other.as_bytes()
+    }
+}
+
+impl PartialEq<SocketName> for str {
+    #[inline]
+    fn eq(&self, other: &SocketName) -> bool {
+        self.as_bytes() == other.as_bytes()
+    }
+}
+
+impl PartialEq<SocketName> for &str {
+    #[inline]
+    fn eq(&self, other: &SocketName) -> bool {
+        self.as_bytes() == other.as_bytes()
     }
 }
 
 impl fmt::Debug for SocketName {
     #[inline]
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut fmt = fmt.debug_tuple("SocketName");
         match self.as_str() {
-            Some(name) => fmt::Debug::fmt(name, fmt),
-            None => fmt::Debug::fmt(&self.0, fmt),
+            Some(name) => fmt.field(&name).finish(),
+            None => fmt.field(&self.0).finish(),
+        }
+    }
+}
+
+impl fmt::Display for SocketName {
+    #[inline]
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.as_str() {
+            Some(name) => fmt.write_str(name),
+            None => fmt.write_str("<non-utf-8>"),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Eq)]
+#[repr(transparent)]
+///Peer name, limited to 63 characters.
+///
+///This tells protocol of the peer
+pub struct PeerName(pub(crate) SocketName);
+
+impl Property<Socket> for PeerName {
+    fn get(target: &Socket) -> Result<Self, ErrorCode> {
+        let mut buf = [0; 64];
+        let result = unsafe {
+            sys::nng_socket_get(**target, sys::NNG_OPT_PEERNAME.as_ptr() as _, buf.as_mut_ptr() as _, &mut buf.len())
+        };
+
+        match result {
+            0 => Ok(Self(SocketName(buf))),
+            code => Err(error(code))
+        }
+    }
+}
+
+impl PartialEq<SocketName> for PeerName {
+    #[inline]
+    fn eq(&self, other: &SocketName) -> bool {
+        self.0.as_bytes() == other.as_bytes()
+    }
+}
+
+impl PartialEq for PeerName {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_bytes() == other.0.as_bytes()
+    }
+}
+
+impl PartialEq<str> for PeerName {
+    #[inline]
+    fn eq(&self, other: &str) -> bool {
+        self.0.as_bytes() == other.as_bytes()
+    }
+}
+
+impl PartialEq<&str> for PeerName {
+    #[inline]
+    fn eq(&self, other: &&str) -> bool {
+        self.0.as_bytes() == other.as_bytes()
+    }
+}
+
+impl PartialEq<PeerName> for str {
+    #[inline]
+    fn eq(&self, other: &PeerName) -> bool {
+        self.as_bytes() == other.0.as_bytes()
+    }
+}
+
+impl PartialEq<PeerName> for &str {
+    #[inline]
+    fn eq(&self, other: &PeerName) -> bool {
+        self.as_bytes() == other.0.as_bytes()
+    }
+}
+
+impl fmt::Debug for PeerName {
+    #[inline]
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut fmt = fmt.debug_tuple("PeerName");
+        match self.0.as_str() {
+            Some(name) => fmt.field(&name).finish(),
+            None => fmt.field(&self.0).finish(),
+        }
+    }
+}
+
+impl fmt::Display for PeerName {
+    #[inline]
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0.as_str() {
+            Some(name) => fmt.write_str(name),
+            None => fmt.write_str("<non-utf-8>"),
         }
     }
 }
