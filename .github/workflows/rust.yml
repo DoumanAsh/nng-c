@@ -48,4 +48,4 @@ jobs:
       run: cargo check
 
     - name: Test
-      run: cargo test --features http
+      run: cargo test --features http,tls

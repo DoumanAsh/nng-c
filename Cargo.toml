@@ -14,20 +14,26 @@ documentation = "https://docs.rs/crate/nng-c"
 version = "3"
 
 [dependencies.nng-c-sys]
-version = "=1.8.0-beta.2"
+version = "=1.8.0-beta.7"
 
 [dependencies.log]
 version = "0.4"
 default-features = false
 optional = true
 
+[[test]]
+name = "tls"
+required-features = ["tls"]
+
 [features]
 # Enables HTTP transport code
 http = ["nng-c-sys/http"]
+# Enables websocket transport code
+websocket = ["nng-c-sys/websocket"]
 # Enables TLS transport code
 tls = ["nng-c-sys/tls"]
 
 [package.metadata.docs.rs]
-features = ["http", "log"]
+features = ["http", "websocket", "log", "tls"]
 # defines the configuration attribute `docsrs`
 rustdoc-args = ["--cfg", "docsrs"]

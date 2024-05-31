@@ -4,7 +4,7 @@ use crate::error::error;
 use crate::msg::Message;
 use crate::aio::Aio;
 use crate::sys;
-use crate::url::Url;
+use crate::str::String;
 use crate::options::{Options, Property};
 
 use core::pin::Pin;
@@ -14,26 +14,39 @@ use core::{mem, fmt, ops, ptr, task};
 
 type InitFn = unsafe extern "C" fn(msg: *mut sys::nng_socket) -> core::ffi::c_int;
 
-#[derive(Copy, Clone, Default)]
+#[derive(Clone, Default)]
 ///Connect options
-pub struct ConnectOptions {
-    flags: c_int
+pub struct ConnectOptions<T> {
+    flags: c_int,
+    dialer: T
 }
 
-impl ConnectOptions {
+impl ConnectOptions<()> {
     ///Initializes default connect options.
     pub const fn new() -> Self {
         Self {
-            flags: 0
+            flags: 0,
+            dialer: ()
         }
     }
+}
 
+impl<T> ConnectOptions<T> {
     ///Sets async mode, making connection to be performed in background
     ///
     ///By default, connection blocks, until socket is connected to the remote peer.
-    pub const fn with_async(self) -> Self {
-        Self {
-            flags: self.flags | sys::NNG_FLAG_NONBLOCK
+    pub const fn with_async(mut self) -> Self {
+        self.flags = self.flags | sys::NNG_FLAG_NONBLOCK;
+        self
+    }
+
+    ///Creates new options with custom dialer options
+    ///
+    ///This is useful to provide TLS config
+    pub const fn with_dialer<R: Options<Dialer>>(&self, dialer: R) -> ConnectOptions<R> {
+        ConnectOptions {
+            flags: self.flags,
+            dialer
         }
     }
 }
@@ -110,34 +123,43 @@ impl Socket {
 
     #[inline]
     ///Binds socket to the specified `url`, starting to listen for incoming messages.
-    pub fn listen(&self, url: Url<'_>) -> Result<(), ErrorCode> {
-        let url = url.as_ptr();
-        let result = unsafe {
-            sys::nng_listen(**self, url as _, ptr::null_mut(), 0)
-        };
-        match result {
-            0 => Ok(()),
-            code => Err(error(code))
-        }
+    pub fn listen(&self, url: String<'_>) -> Result<(), ErrorCode> {
+        self.listen_with(url, &())
+    }
+
+    #[inline]
+    ///Binds socket to the specified `url`, starting to listen for incoming messages.
+    ///
+    ///Allows to provide custom options to initialize listener with.
+    ///Mostly useful to set optional TLS config
+    pub fn listen_with<T: Options<Listener>>(&self, url: String<'_>, options: &T) -> Result<(), ErrorCode> {
+        let listener = Listener::new(self, url)?;
+        options.apply(&listener)?;
+        listener.start()?;
+
+        //Listener will be assigned to the socket and can be closed by it
+        mem::forget(listener);
+
+        Ok(())
     }
 
     #[inline]
     ///Connects to the remote peer via `url`.
-    pub fn connect(&self, url: Url<'_>) -> Result<(), ErrorCode> {
+    pub fn connect(&self, url: String<'_>) -> Result<(), ErrorCode> {
         self.connect_with(url, ConnectOptions::new())
     }
 
     #[inline]
     ///Connects to the remote peer via `url`, with custom options settings
-    pub fn connect_with(&self, url: Url<'_>, options: ConnectOptions) -> Result<(), ErrorCode> {
-        let url = url.as_ptr();
-        let result = unsafe {
-            sys::nng_dial(**self, url as _, ptr::null_mut(), options.flags)
-        };
-        match result {
-            0 => Ok(()),
-            code => Err(error(code))
-        }
+    pub fn connect_with<T: Options<Dialer>>(&self, url: String<'_>, options: ConnectOptions<T>) -> Result<(), ErrorCode> {
+        let dialer = Dialer::new(self, url)?;
+        options.dialer.apply(&dialer)?;
+        dialer.start(options.flags)?;
+
+        //Dialer will be assigned to the socket and can be closed by it
+        mem::forget(dialer);
+
+        Ok(())
     }
 
     #[inline(always)]
@@ -334,6 +356,88 @@ impl Future for FutureReq {
         } else {
             this.aio.register_waker(ctx.waker());
             task::Poll::Pending
+        }
+    }
+}
+
+///Socket listener
+pub struct Listener(pub(crate) sys::nng_listener);
+
+impl Listener {
+    pub(crate) fn new(socket: &Socket, url: String<'_>) -> Result<Self, ErrorCode> {
+        let url = url.as_ptr();
+        let mut this = sys::nng_listener {
+            id: 0
+        };
+
+        let result = unsafe {
+            sys::nng_listener_create(&mut this, **socket, url as _)
+        };
+
+        match result {
+            0 => Ok(Self(this)),
+            code => Err(error(code))
+        }
+    }
+
+    pub(crate) fn start(&self) -> Result<(), ErrorCode> {
+        let result = unsafe {
+            sys::nng_listener_start(self.0, 0)
+        };
+
+        match result {
+            0 => Ok(()),
+            code => Err(error(code))
+        }
+    }
+}
+
+impl Drop for Listener {
+    #[inline]
+    fn drop(&mut self) {
+        unsafe {
+            sys::nng_listener_close(self.0);
+        }
+    }
+}
+
+///Socket dialer
+pub struct Dialer(pub(crate) sys::nng_dialer);
+
+impl Dialer {
+    pub(crate) fn new(socket: &Socket, url: String<'_>) -> Result<Self, ErrorCode> {
+        let url = url.as_ptr();
+        let mut this = sys::nng_dialer {
+            id: 0
+        };
+
+        let result = unsafe {
+            sys::nng_dialer_create(&mut this, **socket, url as _)
+        };
+
+        match result {
+            0 => Ok(Self(this)),
+            code => Err(error(code))
+        }
+    }
+
+    pub(crate) fn start(&self, flags: c_int) -> Result<(), ErrorCode> {
+        let result = unsafe {
+            sys::nng_dialer_start(self.0, flags)
+        };
+
+        match result {
+            0 => Ok(()),
+            code => Err(error(code))
+        }
+    }
+}
+
+impl Drop for Dialer {
+    #[inline]
+    fn drop(&mut self) {
+        unsafe {
+            sys::nng_dialer_close(self.0);
         }
     }
 }

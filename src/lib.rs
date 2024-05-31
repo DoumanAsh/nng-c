@@ -8,8 +8,9 @@
 
 extern crate alloc;
 
+mod defs;
 mod aio;
-pub mod url;
+pub mod str;
 pub use nng_c_sys as sys;
 mod msg;
 pub use msg::Message;
@@ -18,4 +19,5 @@ pub use error::{ErrorCode, NngError};
 pub mod options;
 pub mod socket;
 pub use socket::Socket;
+pub mod tls;
 pub mod utils;

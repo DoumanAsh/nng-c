@@ -19,6 +19,13 @@ pub trait Options<T> {
     fn apply(&self, target: &T) -> Result<(), ErrorCode>;
 }
 
+impl<T> Options<T> for () {
+    #[inline(always)]
+    fn apply(&self, _: &T) -> Result<(), ErrorCode> {
+        Ok(())
+    }
+}
+
 macro_rules! set_bytes_option {
     ($socket:expr, $name:expr, $bytes:expr) => {
         unsafe {

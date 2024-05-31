@@ -1,8 +1,17 @@
-use nng_c::{options, Socket, Message, NngError};
+use nng_c::{tls, options, Socket, Message, NngError};
 
 use core::time;
 
 mod rt;
+
+#[test]
+fn should_test_tls() {
+    let name = tls::get_engine_name();
+    #[cfg(feature = "tls")]
+    assert_eq!("mbed", name);
+    #[cfg(not(feature = "tls"))]
+    assert_eq!("none", name);
+}
 
 #[test]
 fn should_do_req_resp_inproc() {
