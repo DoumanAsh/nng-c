@@ -59,7 +59,6 @@ pub fn enable_logging(level: Level) {
 }
 
 #[cfg(feature = "log")]
-#[cfg_attr(docsrs, doc(cfg(feature = "log")))]
 ///Enables logging using [log](https://crates.io/crates/log) crate
 ///
 ///Requires feature `log`
