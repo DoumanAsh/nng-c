@@ -75,6 +75,12 @@ fn should_do_req_resp_inproc() {
     assert_eq!(second, SECOND);
     assert_eq!(third, THIRD);
     assert_eq!(resp.body(), BYTES);
+
+    let mut buffer = [0; BYTES.len()];
+    server.try_recv(&mut buffer).expect_err("Should not have any more message");
+    client.send(BYTES.into()).expect("send bytes");
+    let result = server.recv(&mut buffer).expect("to receive data");
+    assert_eq!(result, BYTES);
 }
 
 #[test]
@@ -136,6 +142,12 @@ fn should_do_req_resp_async_inproc() {
     assert_eq!(second, SECOND);
     assert_eq!(third, THIRD);
     assert_eq!(resp.body(), BYTES);
+
+    let mut buffer = [0; BYTES.len()];
+    server.try_recv(&mut buffer).expect_err("Should not have any more message");
+    client.send(BYTES.into()).expect("send bytes");
+    let result = server.recv(&mut buffer).expect("to receive data");
+    assert_eq!(result, BYTES);
 }
 
 #[test]
@@ -202,6 +214,12 @@ fn should_do_req_resp_async_tcp() {
     assert_eq!(second, SECOND);
     assert_eq!(third, THIRD);
     assert_eq!(resp.body(), BYTES);
+
+    let mut buffer = [0; BYTES.len()];
+    server.try_recv(&mut buffer).expect_err("Should not have any more message");
+    client.send(BYTES.into()).expect("send bytes");
+    let result = server.recv(&mut buffer).expect("to receive data");
+    assert_eq!(result, BYTES);
 }
 
 #[test]
@@ -263,4 +281,10 @@ fn should_do_req_resp_async_ipc() {
     assert_eq!(second, SECOND);
     assert_eq!(third, THIRD);
     assert_eq!(resp.body(), BYTES);
+
+    let mut buffer = [0; BYTES.len()];
+    server.try_recv(&mut buffer).expect_err("Should not have any more message");
+    client.send(BYTES.into()).expect("send bytes");
+    let result = server.recv(&mut buffer).expect("to receive data");
+    assert_eq!(result, BYTES);
 }

@@ -10,9 +10,101 @@ use crate::options::{Options, Property};
 use core::pin::Pin;
 use core::ffi::c_int;
 use core::future::Future;
-use core::{mem, fmt, ops, ptr, task};
+use core::{mem, fmt, ops, ptr, task, marker, slice};
+
+use alloc::vec::Vec;
 
 type InitFn = unsafe extern "C" fn(msg: *mut sys::nng_socket) -> core::ffi::c_int;
+
+///Wrapper over slice of bytes.
+///
+///Can be converted into from any byte slice
+pub struct Buf<'a> {
+    ptr: *const u8,
+    size: usize,
+    _lifetime: marker::PhantomData<&'a u8>,
+}
+
+impl<'a> Buf<'a> {
+    #[inline]
+    const fn new(ptr: *const u8, size: usize) -> Self {
+        Self {
+            ptr,
+            size,
+            _lifetime: marker::PhantomData,
+        }
+    }
+}
+
+impl<'a> From<&'a [u8]> for Buf<'a> {
+    #[inline(always)]
+    fn from(value: &'a [u8]) -> Self {
+        Self::new(value.as_ptr(), value.len())
+    }
+}
+
+impl<'a, const N: usize> From<&'a [u8; N]> for Buf<'a> {
+    #[inline(always)]
+    fn from(value: &'a [u8; N]) -> Self {
+        Self::new(value.as_ptr(), value.len())
+    }
+}
+
+impl<'a> From<&'a [mem::MaybeUninit<u8>]> for Buf<'a> {
+    #[inline(always)]
+    fn from(value: &'a [mem::MaybeUninit<u8>]) -> Self {
+        Self::new(value.as_ptr() as _, value.len())
+    }
+}
+
+///Wrapper over mutable slice of bytes.
+///
+///Can be converted into from any mutable byte slice or mutable Vec
+pub struct BufMut<'a> {
+    ptr: *mut u8,
+    size: usize,
+    _lifetime: marker::PhantomData<&'a u8>,
+}
+
+impl<'a> BufMut<'a> {
+    #[inline]
+    const fn new(ptr: *mut u8, size: usize) -> Self {
+        Self {
+            ptr,
+            size,
+            _lifetime: marker::PhantomData,
+        }
+    }
+}
+
+impl<'a> From<&'a mut Vec<u8>> for BufMut<'a> {
+    #[inline(always)]
+    fn from(value: &'a mut Vec<u8>) -> Self {
+        let value = value.spare_capacity_mut();
+        From::from(value)
+    }
+}
+
+impl<'a> From<&'a mut [u8]> for BufMut<'a> {
+    #[inline(always)]
+    fn from(value: &'a mut [u8]) -> Self {
+        Self::new(value.as_mut_ptr(), value.len())
+    }
+}
+
+impl<'a, const N: usize> From<&'a mut [u8; N]> for BufMut<'a> {
+    #[inline(always)]
+    fn from(value: &'a mut [u8; N]) -> Self {
+        Self::new(value.as_mut_ptr(), value.len())
+    }
+}
+
+impl<'a> From<&'a mut [mem::MaybeUninit<u8>]> for BufMut<'a> {
+    #[inline(always)]
+    fn from(value: &'a mut [mem::MaybeUninit<u8>]) -> Self {
+        Self::new(value.as_mut_ptr() as _, value.len())
+    }
+}
 
 #[derive(Clone, Default)]
 ///Connect options
@@ -176,40 +268,45 @@ impl Socket {
         T::get(self)
     }
 
-    fn recv_inner<const FLAGS: c_int>(&self, out: &mut [mem::MaybeUninit<u8>]) -> Result<usize, ErrorCode> {
-        let mut size = out.len();
+    fn recv_inner<'a, const FLAGS: c_int>(&self, out: BufMut<'a>) -> Result<&'a [u8], ErrorCode> {
+        let mut size = out.size;
         let result = unsafe {
-            sys::nng_recv(**self, out.as_mut_ptr() as _, &mut size, FLAGS)
+            sys::nng_recv(**self, out.ptr as _, &mut size, FLAGS)
         };
 
         match result {
-            0 => Ok(size),
+            0 => {
+                let out = unsafe {
+                    slice::from_raw_parts(out.ptr, size)
+                };
+                Ok(out)
+            },
             code => Err(error(code)),
         }
     }
 
-    #[inline]
+    #[inline(always)]
     ///Attempts to receive message, writing it in `out` buffer if it is of sufficient size,
     ///returning immediately if no message is available
     ///
     ///If underlying protocol doesn't support receiving messages, this shall return error always
     ///
-    ///Returns number of bytes written on success
+    ///Returns written bytes on success
     ///
     ///Returns [would block](https://docs.rs/error-code/3.2.0/error_code/struct.ErrorCode.html#method.is_would_block)
     ///error if no message is available.
-    pub fn try_recv(&self, out: &mut [mem::MaybeUninit<u8>]) -> Result<usize, ErrorCode> {
-        self.recv_inner::<{sys::NNG_FLAG_NONBLOCK}>(out)
+    pub fn try_recv<'a>(&self, out: impl Into<BufMut<'a>>) -> Result<&'a [u8], ErrorCode> {
+        self.recv_inner::<{sys::NNG_FLAG_NONBLOCK}>(out.into())
     }
 
-    #[inline]
+    #[inline(always)]
     ///Receives message, writing it in `out` buffer if it is of sufficient size, waiting forever if none is available.
     ///
     ///If underlying protocol doesn't support receiving messages, this shall return error always
     ///
-    ///Returns number of bytes written on success
-    pub fn recv(&self, out: &mut [mem::MaybeUninit<u8>]) -> Result<usize, ErrorCode> {
-        self.recv_inner::<0>(out)
+    ///Returns written bytes on success
+    pub fn recv<'a>(&self, out: impl Into<BufMut<'a>>) -> Result<&'a [u8], ErrorCode> {
+        self.recv_inner::<0>(out.into())
     }
 
     ///Receives pending message, waiting forever if none is available.
@@ -259,9 +356,9 @@ impl Socket {
     ///Encodes bytes into message and send it over the socket.
     ///
     ///Internally message shall be encoded and sent over
-    pub fn send(&self, msg: &[u8]) -> Result<(), ErrorCode> {
+    pub fn send(&self, msg: Buf<'_>) -> Result<(), ErrorCode> {
         let result = unsafe {
-            sys::nng_send(**self, msg.as_ptr() as _, msg.len(), 0)
+            sys::nng_send(**self, msg.ptr as _, msg.size, 0)
         };
 
         match result {
