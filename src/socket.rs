@@ -176,33 +176,49 @@ impl Socket {
         T::get(self)
     }
 
-    #[inline]
-    ///Tries to get message, if available, returning `None` if no message is available
-    ///
-    ///If underlying protocol doesn't support receiving messages, this shall return error always
-    pub fn try_recv_msg(&self) -> Result<Option<Message>, ErrorCode> {
-        let mut msg = ptr::null_mut();
+    fn recv_inner<const FLAGS: c_int>(&self, out: &mut [mem::MaybeUninit<u8>]) -> Result<usize, ErrorCode> {
+        let mut size = out.len();
         let result = unsafe {
-            sys::nng_recvmsg(**self, &mut msg, sys::NNG_FLAG_NONBLOCK)
+            sys::nng_recv(**self, out.as_mut_ptr() as _, &mut size, FLAGS)
         };
 
-        match ptr::NonNull::new(msg) {
-            Some(ptr) => Ok(Some(Message(ptr))),
-            None => match result {
-                sys::nng_errno_enum::NNG_EAGAIN => Ok(None),
-                code => Err(error(code)),
-            }
+        match result {
+            0 => Ok(size),
+            code => Err(error(code)),
         }
     }
 
     #[inline]
+    ///Attempts to receive message, writing it in `out` buffer if it is of sufficient size,
+    ///returning immediately if no message is available
+    ///
+    ///If underlying protocol doesn't support receiving messages, this shall return error always
+    ///
+    ///Returns number of bytes written on success
+    ///
+    ///Returns [would block](https://docs.rs/error-code/3.2.0/error_code/struct.ErrorCode.html#method.is_would_block)
+    ///error if no message is available.
+    pub fn try_recv(&self, out: &mut [mem::MaybeUninit<u8>]) -> Result<usize, ErrorCode> {
+        self.recv_inner::<{sys::NNG_FLAG_NONBLOCK}>(out)
+    }
+
+    #[inline]
+    ///Receives message, writing it in `out` buffer if it is of sufficient size, waiting forever if none is available.
+    ///
+    ///If underlying protocol doesn't support receiving messages, this shall return error always
+    ///
+    ///Returns number of bytes written on success
+    pub fn recv(&self, out: &mut [mem::MaybeUninit<u8>]) -> Result<usize, ErrorCode> {
+        self.recv_inner::<0>(out)
+    }
+
     ///Receives pending message, waiting forever if none is available.
     ///
     ///If underlying protocol doesn't support receiving messages, this shall return error always
-    pub fn recv_msg(&self) -> Result<Message, ErrorCode> {
+    fn recv_msg_inner<const FLAGS: c_int>(&self) -> Result<Message, ErrorCode> {
         let mut msg = ptr::null_mut();
         let result = unsafe {
-            sys::nng_recvmsg(**self, &mut msg, 0)
+            sys::nng_recvmsg(**self, &mut msg, FLAGS)
         };
 
         match ptr::NonNull::new(msg) {
@@ -212,9 +228,46 @@ impl Socket {
     }
 
     #[inline]
+    ///Receives pending message, waiting forever if none is available.
+    ///
+    ///If underlying protocol doesn't support receiving messages, this shall return error always
+    pub fn recv_msg(&self) -> Result<Message, ErrorCode> {
+        self.recv_msg_inner::<0>()
+    }
+
+    #[inline]
+    ///Receives pending message, waiting forever if none is available.
+    ///
+    ///If underlying protocol doesn't support receiving messages, this shall return error always
+    ///
+    ///Returns None if no message is available.
+    pub fn try_recv_msg(&self) -> Result<Option<Message>, ErrorCode> {
+        match self.recv_msg_inner::<{sys::NNG_FLAG_NONBLOCK}>() {
+            Ok(msg) => Ok(Some(msg)),
+            Err(error) if error.is_would_block() => Ok(None),
+            Err(error) => Err(error)
+        }
+    }
+
+    #[inline]
     ///Creates new future that attempts to receive message from the socket.
     pub fn recv_msg_async(&self) -> Result<FutureResp, ErrorCode> {
         FutureResp::new(self)
+    }
+
+    #[inline]
+    ///Encodes bytes into message and send it over the socket.
+    ///
+    ///Internally message shall be encoded and sent over
+    pub fn send(&self, msg: &[u8]) -> Result<(), ErrorCode> {
+        let result = unsafe {
+            sys::nng_send(**self, msg.as_ptr() as _, msg.len(), 0)
+        };
+
+        match result {
+            0 => Ok(()),
+            code => Err(error(code)),
+        }
     }
 
     #[inline]
