@@ -105,3 +105,49 @@ pub fn enable_log_logging(level: Level) {
         nng_log_set_logger(Some(nng_rust_log_logger));
     }
 }
+
+#[cfg(feature = "tracing")]
+///Enables logging using [tracing](https://crates.io/crates/tracing) crate
+///
+///Requires feature `tracing`
+///
+///Note that messages are only logged if C strings are valid utf-8
+pub fn enable_tracing(level: Level) {
+    use core::ffi::CStr;
+
+    unsafe extern "C" fn nng_rust_tracing_logger(level: nng_c_sys::nng_log_level::Type, _: nng_c_sys::nng_log_facility::Type, msg_id: *const core::ffi::c_char, msg: *const core::ffi::c_char) {
+        const NNG: &str = "NNG";
+
+        if msg.is_null() {
+            return;
+        }
+
+        let msg = match CStr::from_ptr(msg).to_str() {
+            Ok(msg) => msg,
+            Err(_) => return,
+        };
+
+        let target = if msg_id.is_null() {
+            NNG
+        } else {
+            match CStr::from_ptr(msg_id).to_str() {
+                Ok(msg) => msg,
+                Err(_) => NNG,
+            }
+        };
+
+        match level {
+            nng_c_sys::nng_log_level::NNG_LOG_DEBUG => tracing::trace!(target, "{}", msg),
+            nng_c_sys::nng_log_level::NNG_LOG_INFO => tracing::debug!(target, "{}", msg),
+            nng_c_sys::nng_log_level::NNG_LOG_NOTICE => tracing::info!(target, "{}", msg),
+            nng_c_sys::nng_log_level::NNG_LOG_WARN => tracing::warn!(target, "{}", msg),
+            nng_c_sys::nng_log_level::NNG_LOG_ERR => tracing::error!(target, "{}", msg),
+            _ => (),
+        };
+    }
+
+    unsafe {
+        nng_log_set_level(level as _);
+        nng_log_set_logger(Some(nng_rust_tracing_logger));
+    }
+}

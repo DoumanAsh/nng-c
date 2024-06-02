@@ -4,10 +4,11 @@
 //!
 //!## Features
 //!
-//!- `http` - Enables http transport
-//!- `tls` - Enables TLS transport
-//!- `websocket` - Enables websocket transport. Implies `http` feature.
-//!- `log` - Enables logging via [log](https://crates.io/crates/log) crate
+//!- `http` - Enables http transport;
+//!- `tls` - Enables TLS transpor;
+//!- `websocket` - Enables websocket transport. Implies `http` feature;
+//!- `log` - Enables logging via [log](https://crates.io/crates/log) crate;
+//!- `tracing` - Enables logging via [tracing](https://crates.io/crates/tracing) crate.
 //!
 //!## Usage
 //!

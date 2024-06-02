@@ -21,6 +21,11 @@ version = "0.4"
 default-features = false
 optional = true
 
+[dependencies.tracing]
+version = "0.1"
+default-features = false
+optional = true
+
 [[test]]
 name = "tls"
 required-features = ["tls"]
@@ -34,6 +39,6 @@ websocket = ["nng-c-sys/websocket"]
 tls = ["nng-c-sys/tls"]
 
 [package.metadata.docs.rs]
-features = ["http", "websocket", "log", "tls"]
+features = ["http", "websocket", "tls", "tracing", "log"]
 # defines the configuration attribute `docsrs`
 rustdoc-args = ["--cfg", "docsrs"]
