@@ -12,12 +12,56 @@ use crate::sys;
 pub trait NngError {
     ///Returns whether error code indicates cancellation of future.
     fn is_cancelled(&self) -> bool;
+    ///Returns whether error code indicates operation timed out.
+    fn is_timed_out(&self) -> bool;
+    ///Returns whether error code indicates aborted connection.
+    fn is_conn_aborted(&self) -> bool;
+    ///Returns whether error code indicates connection has been reset.
+    fn is_conn_reset(&self) -> bool;
+    ///Returns whether error code indicates connection has been refused.
+    fn is_conn_refused(&self) -> bool;
+    ///Returns whether error code indicates problem with peer's authentication
+    fn is_peer_auth(&self) -> bool;
+    ///Returns whether error code indicates problem using crypto
+    ///
+    ///This is mostly indicates invalid local configuration (i.e. no TLS certificate etc)
+    fn is_crypto(&self) -> bool;
 }
 
 impl NngError for ErrorCode {
     #[inline(always)]
     fn is_cancelled(&self) -> bool {
         self.raw_code() == sys::nng_errno_enum::NNG_ECANCELED
+    }
+
+    #[inline(always)]
+    fn is_timed_out(&self) -> bool {
+        self.raw_code() == sys::nng_errno_enum::NNG_ETIMEDOUT
+    }
+
+    #[inline(always)]
+    fn is_conn_aborted(&self) -> bool {
+        self.raw_code() == sys::nng_errno_enum::NNG_ECONNABORTED
+    }
+
+    #[inline(always)]
+    fn is_conn_reset(&self) -> bool {
+        self.raw_code() == sys::nng_errno_enum::NNG_ECONNRESET
+    }
+
+    #[inline(always)]
+    fn is_conn_refused(&self) -> bool {
+        self.raw_code() == sys::nng_errno_enum::NNG_ECONNREFUSED
+    }
+
+    #[inline(always)]
+    fn is_peer_auth(&self) -> bool {
+        self.raw_code() == sys::nng_errno_enum::NNG_EPEERAUTH
+    }
+
+    #[inline(always)]
+    fn is_crypto(&self) -> bool {
+        self.raw_code() == sys::nng_errno_enum::NNG_ECRYPTO
     }
 }
 
