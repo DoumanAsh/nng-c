@@ -28,13 +28,41 @@ pub struct String<'a> {
 }
 
 impl<'a> String<'a> {
+    #[inline]
+    ///Creates new instance from C string (null terminated)
+    ///
+    ///Returns None if input has no NULL character at the end
+    pub const fn try_new_c(string: &'a [u8]) -> Option<Self> {
+        if string[string.len() - 1] == 0 {
+            Some(Self {
+                state: State::Slice(string)
+            })
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    ///Creates new instance from C string (null terminated)
+    ///
+    ///Panics if input has no NULL character at the end
+    pub const fn new_c(string: &'a [u8]) -> Self {
+        if string[string.len() - 1] == 0 {
+            Self {
+                state: State::Slice(string)
+            }
+        } else {
+            panic!("string is not NULL terminated")
+        }
+    }
+
     ///Creates new String.
     ///
     ///If `string` ends with null character, then it slice will be used as it is otherwise
     ///it shall create buffer to store `string` with null terminating character appended
     pub fn new(string: &'a [u8]) -> Self {
-        let state = if string.ends_with(&[0]) {
-            State::Slice(string)
+        let state = if let Some(this) = Self::try_new_c(string) {
+            this.state
         } else if string.len() < STATIC_SIZE {
             let mut buffer = [0u8; STATIC_SIZE];
             buffer[..string.len()].copy_from_slice(string);

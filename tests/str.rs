@@ -1,6 +1,12 @@
 use nng_c::str::{String, STATIC_SIZE};
 
 #[test]
+fn should_create_static_addr() {
+    const ADDR: String = String::new_c(b"null string\0");
+    assert_eq!(ADDR.as_bytes(), b"null string");
+}
+
+#[test]
 fn should_create_valid_static_string() {
     let strs = [
         "\0",
