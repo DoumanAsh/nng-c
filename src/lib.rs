@@ -68,7 +68,7 @@
 #![warn(missing_docs)]
 //Imagine enabling this shit by default
 #![allow(clippy::deprecated_clippy_cfg_attr)]
-#![cfg_attr(feature = "cargo-clippy", allow(clippy::style))]
+#![allow(clippy::style)]
 
 extern crate alloc;
 
