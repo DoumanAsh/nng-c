@@ -17,7 +17,7 @@ enum State<'a> {
 }
 
 const _: () = {
-    assert!(mem::size_of::<State>() == 24);
+    assert!(mem::size_of::<State>() == mem::size_of::<Vec<u8>>());
 };
 
 #[repr(transparent)]
