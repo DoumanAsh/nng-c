@@ -12,6 +12,8 @@ Version corresponds to C library
 
 - `http` - Enables http transport;
 - `tls` - Enables TLS transport;
+- `tls-no-vendored` - Enables TLS transport, but assume mbedtls is available as dynamic library in default paths (e.g. /usr/lib64)
+- `tls-pkg-config` - Enables TLS transport, but use pkg-config to discover mbedtls
 - `websocket` - Enables websocket transport. Implies `http` feature;
 - `log` - Enables logging via [log](https://crates.io/crates/log) crate;
 - `tracing` - Enables logging via [tracing](https://crates.io/crates/tracing) crate.
